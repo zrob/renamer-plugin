@@ -1,14 +1,12 @@
 package main
 
 import (
-	"fmt"
-
 	"code.cloudfoundry.org/cli/plugin"
+	"fmt"
+	"os"
 )
 
-// BasicPlugin is the struct implementing the interface defined by the core CLI. It can
-// be found at  "code.cloudfoundry.org/cli/plugin/plugin.go"
-type BasicPlugin struct{}
+type RenamerPlugin struct{}
 
 // Run must be implemented by any plugin because it is part of the
 // plugin interface defined by the core CLI.
@@ -22,10 +20,35 @@ type BasicPlugin struct{}
 // Any error handling should be handled with the plugin itself (this means printing
 // user facing errors). The CLI will exit 0 if the plugin exits 0 and will exit
 // 1 should the plugin exits nonzero.
-func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
-	// Ensure that we called the command basic-plugin-command
-	if args[0] == "basic-plugin-command" {
-		fmt.Println("Running the basic-plugin-command")
+func (c *RenamerPlugin) Run(cliConnection plugin.CliConnection, args []string) {
+	if args[0] == "renamify" {
+		appName := args[1]
+		newName := appName + "-potato"
+
+		fmt.Printf("Renaming app '%s' to '%s'\n\n", appName, newName)
+
+		app, err := cliConnection.GetApp(appName)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(-1)
+		}
+
+		path := fmt.Sprintf("/v3/apps/%s", app.Guid)
+		requestBody := fmt.Sprintf(`{"name": "%s"}`, newName)
+
+		_, err = cliConnection.CliCommandWithoutTerminalOutput("curl", path, "-X", "PATCH", "-d", requestBody)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(-1)
+		}
+
+		fmt.Printf("Renamed your app!\n\n")
+
+		_, err = cliConnection.CliCommand("app", newName)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(-1)
+		}
 	}
 }
 
@@ -41,9 +64,9 @@ func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
 // defines the command `cf basic-plugin-command` once installed into the CLI. The
 // second field, HelpText, is used by the core CLI to display help information
 // to the user in the core commands `cf help`, `cf`, or `cf -h`.
-func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
+func (c *RenamerPlugin) GetMetadata() plugin.PluginMetadata {
 	return plugin.PluginMetadata{
-		Name: "MyBasicPlugin",
+		Name: "RenamerPlugin",
 		Version: plugin.VersionType{
 			Major: 1,
 			Minor: 0,
@@ -56,13 +79,10 @@ func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
 		},
 		Commands: []plugin.Command{
 			{
-				Name:     "basic-plugin-command",
-				HelpText: "Basic plugin command's help text",
-
-				// UsageDetails is optional
-				// It is used to show help of usage of each command
+				Name:     "renamify",
+				HelpText: "Append '-potato' to an app name, because potatoes are awesome!",
 				UsageDetails: plugin.Usage{
-					Usage: "basic-plugin-command\n   cf basic-plugin-command",
+					Usage: "cf renamify APP_NAME",
 				},
 			},
 		},
@@ -82,7 +102,7 @@ func main() {
 	// Note: The plugin's main() method is invoked at install time to collect
 	// metadata. The plugin will exit 0 and the Run([]string) method will not be
 	// invoked.
-	plugin.Start(new(BasicPlugin))
+	plugin.Start(new(RenamerPlugin))
 	// Plugin code should be written in the Run([]string) method,
 	// ensuring the plugin environment is bootstrapped.
 }
